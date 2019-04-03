@@ -1,44 +1,59 @@
 import machine
 from machine import ADC
 from neopixel import NeoPixel
-import network
 
 import adafruit_io as io
+from plant_monitor import Board
 from secrets import secrets
+from constants import * 
 
-# setup 
+"""Setup 
 
-# moisture sensor pwr connected to GPI14. 
-pwr_sensor = machine.Pin(14, machine.Pin.OUT)
-
-# moisture sensor analog signal on ADC 
-# moisture_sensor.read() 0-1024 
-moisture_sensor = ADC(0)
-
-# calibration mode pin GPIO2 
-calibration_pin = machine.Pin(2, machine.Pin.IN)
-#print(calibration_pin.value())
-
-# neopixel   
-# feather can output 500 mA max.
-# selected color: (33, 23, 125)
-# 110 mA at 25% 
-# 370 mA at 100%
-np_pin = machine.Pin(0, machine.Pin.OUT)
-np = NeoPixel(np_pin, 30)   # create NeoPixel driver on GPIO0 for 8 pixels
-#np[0] = (255, 0, 255)       # set the first pixel to white
-#np.write()                  # write data to all pixels
-#r, g, b = np[0]             # get first pixel colour
-
+"""
 # adafruit io client
-
 client=io.Client(secrets['ssid'], 
                  secrets['password'], 
                  secrets['aio_username'], 
                  secrets['aio_key']
                 )
 client.connect()
-client.send_data('moisture-sensor', 100)
+# plant monitor board 
+board = Board()
+
+"""Main 
+    - check calibration pin
+    - if delay, get moisture & send data to io
+    - update neopixel animation depending on moisture level imp
+"""
+current_mode = Board.NORMAL
+last_upd_time = 0
+while True:
+    # update current mode 
+    if current_mode == Board.NORMAL and board.is_calibration():
+        print('set to calibration mode') 
+        current_mode = Board.CAL
+    elif current_mode == Board.CAL and not board.is_calibration(): 
+        print('set to normal mode') 
+        current_mode = Board.NORMAL
+
+    # normal mode
+    if current_mode == Board.NORMAL:
+        now = time.ticks_ms()
+        delta = time.ticks_diff(now, last_upd_time)
+        if delta > delay_upd*1000:
+            last_upd_time = now 
+            is_below, value = board.is_moisture_below_thresh()
+            client.send_data('moisture-sensor', value)
+            if is_below:
+                board.np_animate_update()
+            else: 
+                board.np_off()
+
+    # calibration mode. nothing to do on update 
+
+
+
+
 
 
 
